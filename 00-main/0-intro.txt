@@ -1,0 +1,31 @@
+Terraform   provides     " Infrastructure As Code "
+
+	:-    Managing Complete Infrastructure Using Code
+
+->   Multi-Cloud   Computing 
+
+-> use file Extention as    .tf     
+
+
+commands used 
+
+	terraform   init   		         -  initializing the folder 
+	terraform validate		         -  finding errors through validating code
+	terraform apply    		         -  creating the infrastructure
+	terraform destroy		         -  destroying the infrastructure 
+	terraform init  -upgrade	         - reconfiguring the packages
+	terraform workspace new 	         - creating a new workspace
+	terraform workspace  select	         - selecting the workspace
+	terraform apply --auto-approve	         - to avoid approval while creating infrastructure
+	terraform destroy --auto-approve      - to avoid approval while destructing infrastructure
+	terraform  taint
+	terraform  plan  -var-file   <filename>.tfvars    -out=<filename>
+				        -  to store plan parsing values from a var-file   in a file 
+	export   TF_LOG=trace	        -  to enable logs 
+	export TF_LOG_PATH = <filename>.log
+				        -  to store logs in afile
+
+	terraform  apply  -target  <resource name>
+				        -  recreate the specific resource with target if changed
+
+ 
