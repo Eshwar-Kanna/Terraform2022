@@ -1,0 +1,196 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.16"
+    }
+  }
+}
+
+variable "AWS_REGION" {
+  default = "us-east-1"
+}
+
+variable  "subnet-cidr" {
+default = ["10.0.1.0/24" , "10.0.2.0/24","10.0.3.0/24"]
+}
+
+
+variable "azs"{
+default = ["us-east-1a", "us-east-1b" , "us-east-1c"]
+}
+
+
+
+
+provider "aws" {
+  region     = var.AWS_REGION
+  access_key = "AKIA3PVTPFF2NJDV43OS"
+  secret_key = "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"
+}
+
+
+resource "aws_vpc" "main" { 
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+  enable_dns_support = true
+  enable_dns_hostnames = true
+  assign_generated_ipv6_cidr_block = true
+
+  tags = {
+    Name = "terraform-vpc"
+  }
+}
+
+
+
+
+
+resource "aws_subnet"  "private-subnet" {
+count = length(var.subnet-cidr) 
+vpc_id = aws_vpc.main.id
+map_public_ip_on_launch = true
+availability_zone = element(var.azs , count.index)
+cidr_block = element(var.subnet-cidr , count.index)
+
+tags ={
+Name = "terraform-subnet-${count.index + 1}"
+}
+}
+
+
+
+
+
+resource "aws_subnet"  "public-subnet" {
+count = 1 
+vpc_id = aws_vpc.main.id
+map_public_ip_on_launch = true
+availability_zone = element(var.azs , count.index)
+cidr_block = "10.0.4.0/24"
+
+tags ={
+Name = "terraform-subnet-4"
+}
+}
+
+
+module "key_pair" {
+  source = "terraform-aws-modules/key-pair/aws"
+  key_name           = "terraform_key"
+  create_private_key = true
+}
+
+
+resource "aws_internet_gateway" "terraformGW" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "main"
+  }
+}
+
+
+
+resource "aws_route_table" "table" {
+  vpc_id =  aws_vpc.main.id
+ route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.terraformGW.id
+
+  }
+  tags = {
+    Name = "MyRoute"
+  }
+}
+
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public-subnet[0].id  
+  route_table_id = aws_route_table.table.id
+}
+
+
+
+variable "sgports" { 
+
+default = [22 , 80 , 443 ] 
+
+}
+
+
+resource "aws_security_group" "allow_tls_public" {
+  name        = "allow_tlsandssh"
+  description = "Allow TLS inbound traffic"
+  vpc_id      =  aws_vpc.main.id
+
+ dynamic  "ingress" {
+    
+for_each  = var.sgports
+iterator = portnumber
+ content { 
+    	description      = "TLS from VPC"
+    	from_port        = portnumber.value
+    	to_port          = portnumber.value
+    	protocol         = "tcp"
+    	cidr_blocks      = ["0.0.0.0/0"]
+   	# ipv6_cidr_blocks = ["::/0"]
+                 }
+}
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = {
+    Name = "allow_tls_pub"
+  }
+}
+
+
+output "sg" {
+    value = aws_security_group.allow_tls_public.id
+}
+
+
+
+
+variable "amiId" {
+  default = "ami-0aa7d40eeae50c9a9"
+}
+
+
+resource "aws_instance" "publicos" {
+  count                  = 1
+  ami                    = var.amiId
+  key_name               = "terraform"
+  security_groups        = ["${aws_security_group.allow_tls_public.id}"]
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.public-subnet[count.index].id 
+  
+  tags = {
+    Name = "public"
+  }
+ 
+}
+
+
+resource "aws_instance" "privateos" {
+  count                  = 3
+  ami                    = var.amiId
+  key_name               = "terraform"
+  security_groups        = ["${aws_security_group.allow_tls_public.id}"]
+  instance_type          = "t2.micro"
+  subnet_id              = element([aws_subnet.private-subnet[0].id , aws_subnet.private-subnet[1].id  , aws_subnet.private-subnet[2].id] , count.index) 
+
+  tags = {
+    Name = "private"
+  }
+  
+}
+
+
